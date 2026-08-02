@@ -1,7 +1,10 @@
 // ========== SettingsPanel.tsx ==========
 // 设置面板: 品牌选择、尺寸、抖动算法、颜色数量、后处理选项
+//
+// 尺寸输入框: 不做实时数值范围检测, 仅限制正整数输入;
+// 右侧提示有效范围, 在点击"生成图纸"时统一校验, 不合法则弹出同风格提示弹窗。
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { PatternConfig, BeadBrand, DitherAlgorithm, Palette } from '../lib/types';
 import { getAllPalettes } from '../lib/palettes';
 
@@ -14,6 +17,10 @@ interface SettingsPanelProps {
   palettes: Palette[];
   onBack: () => void;
 }
+
+// 尺寸常量
+const MIN_SIZE = 4;
+const MAX_SIZE = 200;
 
 const BRAND_OPTIONS: { value: BeadBrand; label: string }[] = [
   { value: 'artkal-s', label: 'Artkal S (2.6mm)' },
@@ -66,6 +73,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   palettes,
   onBack,
 }) => {
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   const update = <K extends keyof PatternConfig>(key: K, value: PatternConfig[K]) => {
     onConfigChange({ ...config, [key]: value });
   };
@@ -78,6 +87,48 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       brand,
       beadSize: palette?.size ?? config.beadSize,
     });
+  };
+
+  // 尺寸输入: 仅允许正整数, 不做范围实时检测
+  const handleWidthChange = (raw: string) => {
+    // 过滤非数字字符, 仅保留正整数
+    const cleaned = raw.replace(/[^0-9]/g, '');
+    const val = cleaned === '' ? 0 : parseInt(cleaned, 10);
+    update('width', val);
+  };
+
+  const handleHeightChange = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9]/g, '');
+    const val = cleaned === '' ? 0 : parseInt(cleaned, 10);
+    update('height', val);
+  };
+
+  // 点击"生成图纸"时校验尺寸
+  const handleGenerateClick = () => {
+    if (!hasImage) return;
+
+    const w = config.width;
+    const h = config.height;
+
+    if (!Number.isInteger(w) || w < MIN_SIZE) {
+      setValidationError(`宽度不能小于 ${MIN_SIZE}`);
+      return;
+    }
+    if (w > MAX_SIZE) {
+      setValidationError(`宽度不能大于 ${MAX_SIZE}`);
+      return;
+    }
+    if (!Number.isInteger(h) || h < MIN_SIZE) {
+      setValidationError(`高度不能小于 ${MIN_SIZE}`);
+      return;
+    }
+    if (h > MAX_SIZE) {
+      setValidationError(`高度不能大于 ${MAX_SIZE}`);
+      return;
+    }
+
+    setValidationError(null);
+    onGenerate();
   };
 
   const selectedPalette = palettes.find((p) => p.id === config.brand);
@@ -115,28 +166,41 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-sm">宽:</span>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               className="pixel-input"
               style={{ width: '80px' }}
-              value={config.width}
-              min={4}
-              max={200}
-              onChange={(e) => update('width', Math.max(4, Math.min(200, Number(e.target.value) || 4)))}
+              value={config.width === 0 ? '' : config.width}
+              onChange={(e) => handleWidthChange(e.target.value)}
             />
           </div>
           <span className="text-lg">×</span>
           <div className="flex items-center gap-2">
             <span className="text-sm">高:</span>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               className="pixel-input"
               style={{ width: '80px' }}
-              value={config.height}
-              min={4}
-              max={200}
-              onChange={(e) => update('height', Math.max(4, Math.min(200, Number(e.target.value) || 4)))}
+              value={config.height === 0 ? '' : config.height}
+              onChange={(e) => handleHeightChange(e.target.value)}
             />
           </div>
+          {/* 提示文字 */}
+          <span
+            className="text-xs"
+            style={{
+              color: 'var(--color-text-light)',
+              background: 'var(--bg-secondary)',
+              padding: '4px 10px',
+              borderRadius: 'var(--radius-sm)',
+              border: '2px solid var(--color-border)',
+            }}
+          >
+            范围: {MIN_SIZE} ~ {MAX_SIZE}
+          </span>
         </div>
         <p className="text-xs mt-1" style={{ color: 'var(--color-text-light)' }}>
           总计 {config.width * config.height} 颗 · 实际尺寸约{' '}
@@ -253,7 +317,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </button>
         <button
           className="pixel-btn primary"
-          onClick={onGenerate}
+          onClick={handleGenerateClick}
           disabled={!hasImage || isProcessing}
           style={{ minWidth: '180px', justifyContent: 'center' }}
         >
@@ -267,6 +331,58 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           )}
         </button>
       </div>
+
+      {/* 校验错误弹窗 */}
+      {validationError && (
+        <div
+          onClick={() => setValidationError(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <div
+            className="pixel-card animate-bounce-in"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '360px',
+              width: '90%',
+              background: '#FFF0F0',
+              borderColor: '#EF4444',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '40px', marginBottom: '8px' }}>⚠️</div>
+            <h3
+              className="text-lg font-bold mb-2"
+              style={{ color: '#DC2626' }}
+            >
+              尺寸不合法
+            </h3>
+            <p className="text-sm mb-4" style={{ color: 'var(--color-text)' }}>
+              {validationError}
+            </p>
+            <p className="text-xs mb-4" style={{ color: 'var(--color-text-light)' }}>
+              有效范围: {MIN_SIZE} ~ {MAX_SIZE} (正整数)
+            </p>
+            <button
+              className="pixel-btn danger"
+              onClick={() => setValidationError(null)}
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              知道了
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

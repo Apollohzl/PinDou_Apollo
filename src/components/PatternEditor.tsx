@@ -48,6 +48,22 @@ const PatternEditor: React.FC<PatternEditorProps> = ({
 
   const usedIndices = useMemo(() => getUsedColorIndices(grid), [grid]);
 
+  // 点击色卡选择颜色时, 自动切换到画笔工具, 方便直接绘制
+  const handleColorSelect = useCallback((idx: number) => {
+    setCurrentColor(idx);
+    setCurrentTool('brush');
+  }, []);
+
+  // 右键色卡: 切换到全局换色工具 (将该颜色替换为当前选中颜色)
+  const handleColorRightClick = useCallback(
+    (e: React.MouseEvent, idx: number) => {
+      e.preventDefault();
+      setCurrentColor(idx);
+      setCurrentTool('replace');
+    },
+    []
+  );
+
   // 更新撤销/重做可用状态
   const updateUndoRedoState = useCallback(() => {
     const hm = historyRef.current;
@@ -310,7 +326,8 @@ const PatternEditor: React.FC<PatternEditorProps> = ({
       <PaletteSelector
         palette={palette}
         currentColor={currentColor}
-        onColorSelect={setCurrentColor}
+        onColorSelect={handleColorSelect}
+        onColorRightClick={handleColorRightClick}
         usedIndices={usedIndices}
       />
     </div>

@@ -1,5 +1,6 @@
 // ========== Header.tsx ==========
 // 页头: 项目 logo、名称与步骤指示器
+// 支持导入模式: 当 isImported 为 true 时, 禁用步骤 1-3 (上传/设置/生成)
 
 import React from 'react';
 
@@ -7,6 +8,7 @@ interface HeaderProps {
   currentStep: number;
   maxStep: number;
   onStepClick: (step: number) => void;
+  isImported?: boolean;
 }
 
 const STEPS = [
@@ -17,7 +19,7 @@ const STEPS = [
   { num: 5, label: '导出' },
 ];
 
-const Header: React.FC<HeaderProps> = ({ currentStep, maxStep, onStepClick }) => {
+const Header: React.FC<HeaderProps> = ({ currentStep, maxStep, onStepClick, isImported = false }) => {
   return (
     <header
       style={{
@@ -80,7 +82,10 @@ const Header: React.FC<HeaderProps> = ({ currentStep, maxStep, onStepClick }) =>
         {/* 步骤指示器 */}
         <nav className="step-indicator">
           {STEPS.map((step, i) => {
-            const isDisabled = step.num > maxStep;
+            // 导入模式下禁用步骤 1-3
+            const isImportDisabled = isImported && step.num < 4;
+            const isMaxDisabled = step.num > maxStep;
+            const isDisabled = isImportDisabled || isMaxDisabled;
             const isActive = step.num === currentStep;
             const isCompleted = step.num < currentStep;
 

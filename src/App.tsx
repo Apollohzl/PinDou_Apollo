@@ -61,6 +61,8 @@ const App: React.FC = () => {
   // 步骤状态
   const [step, setStep] = useState(1);
   const [maxStep, setMaxStep] = useState(1);
+  // 导入模式: 从 JSON 导入的项目, 禁止返回步骤 1-3
+  const [isImported, setIsImported] = useState(false);
 
   // 图片状态
   const [imageData, setImageData] = useState<ImageData | null>(null);
@@ -125,6 +127,7 @@ const App: React.FC = () => {
       setProjectTitle(fileName.replace(/\.[^.]+$/, '') || '未命名项目');
       setMaxStep(2);
       setStep(2);
+      setIsImported(false);
       setProcessError(null);
     },
     []
@@ -190,8 +193,9 @@ const App: React.FC = () => {
       setPalette(fullPalette);
       setProjectTitle(title);
       setMaxStep(5);
-      setStep(5);
+      setStep(4);
       setWorkspaceTab('edit');
+      setIsImported(true);
       historyRef.current.clear();
       setProcessError(null);
     },
@@ -201,10 +205,12 @@ const App: React.FC = () => {
   // ---------- 步骤导航 ----------
   const handleStepClick = useCallback(
     (targetStep: number) => {
+      // 导入模式下禁止访问步骤 1-3
+      if (isImported && targetStep < 4) return;
       if (targetStep > maxStep) return;
       setStep(targetStep);
     },
-    [maxStep]
+    [maxStep, isImported]
   );
 
   // ---------- 渲染各步骤内容 ----------
@@ -220,6 +226,7 @@ const App: React.FC = () => {
             targetHeight={config.height}
             onTargetSizeChange={handleTargetSizeChange}
             onNext={() => setStep(2)}
+            onImportJSON={handleImport}
           />
         );
 
@@ -444,7 +451,7 @@ const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      <Header currentStep={step} maxStep={maxStep} onStepClick={handleStepClick} />
+      <Header currentStep={step} maxStep={maxStep} onStepClick={handleStepClick} isImported={isImported} />
       <main className="app-main">
         {isProcessing && step !== 3 ? (
           <div className="pixel-card text-center" style={{ padding: '48px' }}>

@@ -1,5 +1,7 @@
 // ========== PaletteSelector.tsx ==========
 // 色卡选择器: 显示所有颜色, 支持点击选择, 标记已使用/未使用
+// 左键点击: 选择颜色并自动切换画笔工具
+// 右键点击: 选择颜色并切换全局换色工具
 
 import React, { useMemo } from 'react';
 import type { Palette } from '../lib/types';
@@ -8,6 +10,7 @@ interface PaletteSelectorProps {
   palette: Palette;
   currentColor: number;
   onColorSelect: (index: number) => void;
+  onColorRightClick?: (e: React.MouseEvent, index: number) => void;
   usedIndices: Set<number>;
 }
 
@@ -15,6 +18,7 @@ const PaletteSelector: React.FC<PaletteSelectorProps> = ({
   palette,
   currentColor,
   onColorSelect,
+  onColorRightClick,
   usedIndices,
 }) => {
   const stats = useMemo(() => {
@@ -42,6 +46,11 @@ const PaletteSelector: React.FC<PaletteSelectorProps> = ({
         </div>
       </div>
 
+      {/* 操作提示 */}
+      <p className="text-xs mb-2" style={{ color: 'var(--color-text-light)' }}>
+        💡 左键点击选色并绘制 · 右键点击选色并全局换色
+      </p>
+
       <div className="palette-grid">
         {palette.colors.map((color, idx) => {
           const isUsed = usedIndices.has(idx);
@@ -53,7 +62,8 @@ const PaletteSelector: React.FC<PaletteSelectorProps> = ({
               className="palette-item"
               style={{ position: 'relative' }}
               onClick={() => onColorSelect(idx)}
-              title={`${color.code} ${color.name} (${color.nameEn})`}
+              onContextMenu={onColorRightClick ? (e) => onColorRightClick(e, idx) : undefined}
+              title={`${color.code} ${color.name} (${color.nameEn})\n左键: 选色绘制 · 右键: 全局换色`}
             >
               <div
                 className={`color-swatch ${isSelected ? 'selected' : ''}`}

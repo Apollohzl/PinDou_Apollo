@@ -16,6 +16,7 @@ const ProductionGuide: React.FC<ProductionGuideProps> = ({ grid, palette }) => {
   const [mode, setMode] = useState<GuideMode>('row');
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [zoom, setZoom] = useState(1);
 
   // 逐行模式: 总步数 = height
   // 逐色模式: 总步数 = 使用的颜色数
@@ -276,13 +277,41 @@ const ProductionGuide: React.FC<ProductionGuideProps> = ({ grid, palette }) => {
         </div>
       </div>
 
-      {/* Canvas 预览 */}
+      {/* Canvas 预览 + 缩放控件 */}
+      <div className="pixel-card">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <h3 className="text-lg" style={{ color: 'var(--color-text)' }}>
+            预览图
+          </h3>
+          {/* 缩放控件 (与编辑页面同款) */}
+          <div className="flex items-center gap-2">
+            <button
+              className="tool-btn"
+              onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
+              title="缩小"
+            >
+              🔍−
+            </button>
+            <span className="text-sm font-bold" style={{ minWidth: '40px', textAlign: 'center' }}>
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              className="tool-btn"
+              onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
+              title="放大"
+            >
+              🔍+
+            </button>
+          </div>
+        </div>
+      </div>
+
       <PatternCanvas
         grid={grid}
         palette={palette}
         showGrid={true}
         showColorCode={true}
-        zoom={1}
+        zoom={zoom}
         editable={false}
         highlightRow={highlightRow}
         highlightColorIndices={highlightColorIndices}
