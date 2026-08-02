@@ -61,7 +61,7 @@ export interface PatternConfig {
 
 // ========== 编辑器类型 ==========
 
-export type ToolType = 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'replace';
+export type ToolType = 'brush' | 'eraser' | 'fill' | 'eyedropper' | 'replace' | 'hand';
 
 export interface EditorState {
   grid: PatternGrid;

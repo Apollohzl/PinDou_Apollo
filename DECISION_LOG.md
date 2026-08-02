@@ -684,3 +684,116 @@
   - 默认配置添加 `showGrid: true`
   - 添加 useEffect 管理网格线的创建/移除，依赖 `config.showGrid`、`grid.width`、`grid.height`
   - UI 添加"显示网格线"勾选框
+
+---
+
+## 决策 30：制作引导页 Canvas 拖拽平移实现方案
+
+### 问题描述
+制作引导页面的预览图只能通过滚动条滚动查看，交互死板不自然，用户希望可以通过点击拖拽来移动查看整个画布。
+
+### 需求
+- 在制作引导页的预览图中，用户可以点击拖拽画布来平移查看不同区域
+- 需同时支持鼠标和触摸操作
+- 不能影响现有的高亮、完成状态等显示功能
+
+### 可选选项
+
+#### 选项 A：使用第三方库 (如 react-draggable / panzoom)
+- **原理**：引入专门的手势/平移库处理拖拽
+- **优点**：功能完善，支持惯性滚动等高级特性
+- **缺点**：增加依赖包体积，与现有 Canvas 渲染和滚动容器集成可能冲突
+- **风险**：中高风险（兼容性和集成成本）
+
+#### 选项 B：在 PatternCanvas 中实现原生拖拽平移（已选择）
+- **原理**：在 PatternCanvas 组件中添加 `panMode` prop，当启用时拦截鼠标/触摸事件，通过修改 `containerRef.scrollLeft/scrollTop` 实现平移
+- **优点**：
+  - 零依赖，纯原生实现
+  - 与现有 Canvas 渲染逻辑完全解耦，panMode 只影响事件处理不影响绘制
+  - 同时支持鼠标和触摸（移动端友好）
+  - 代码集中在一个组件中，易于维护
+- **缺点**：无惯性滚动效果（松手即停）
+- **风险**：极低风险
+
+#### 选项 C：在 ProductionGuide 中单独实现拖拽逻辑
+- **原理**：不修改 PatternCanvas，在 ProductionGuide 组件中添加事件监听
+- **缺点**：需要直接操作 DOM 获取滚动容器引用，与 PatternCanvas 内部结构耦合，不优雅
+- **风险**：中等风险（DOM 结构变化时易碎）
+
+### 最终选择：选项 B
+
+### 选择理由
+1. **零依赖**：不引入任何第三方库，对 GitHub Pages 静态部署零影响
+2. **复用性强**：`panMode` 是 PatternCanvas 的通用 prop，制作引导页和编辑页均可使用
+3. **实现简洁**：通过 `containerRef` 直接操作 `scrollLeft/scrollTop`，利用浏览器原生滚动能力，无需手动计算位移边界
+4. **双端支持**：鼠标和触摸事件统一处理，`handlePanStart/Move/End` 三个函数接收 clientX/clientY，同时适配鼠标和触摸
+5. **游标提示**：panMode 时游标变为 `grab`，直观告知用户可拖拽
+6. **全局 mouseup 监听**：防止拖拽到 canvas 外部松开后状态未重置
+
+### 实现细节
+- `PatternCanvas` 新增 `panMode` prop（默认 false）
+- 新增 `containerRef` 引用滚动容器 `.canvas-container`
+- 新增 `isPanningRef` 和 `panStartRef` 记录拖拽起始状态（鼠标位置 + 滚动位置）
+- `handlePanStart/Move/End` 三个函数处理平移逻辑
+- 鼠标和触摸事件中优先判断 panMode，启用时走平移逻辑，否则走原有编辑逻辑
+- `ProductionGuide` 传入 `panMode={true}` 始终启用拖拽平移
+- 添加提示文字 "💡 拖拽预览图可移动查看 · 使用缩放按钮调整大小"
+
+---
+
+## 决策 31：编辑页抓取工具实现方案
+
+### 问题描述
+编辑页面在放大画布后，只能通过滚动条滚动查看，交互不够灵活。用户希望在工具栏中添加一个"抓取"按钮，点击后可以直接拖拽移动画布。
+
+### 需求
+- 工具栏新增"抓取"工具按钮
+- 选中抓取工具时，鼠标拖拽画布可平移查看
+- 选中其他工具时恢复正常编辑功能
+- 抓取工具不应对网格数据产生任何修改
+
+### 可选选项
+
+#### 选项 A：使用空格键临时切换抓取模式
+- **原理**：按住空格键临时启用平移，松开恢复
+- **优点**：专业软件常用模式（如 Figma/Photoshop），效率高
+- **缺点**：移动端无法使用空格键；用户不易发现此功能
+- **风险**：低风险，但功能可发现性差
+
+#### 选项 B：工具栏添加抓取工具按钮（已选择）
+- **原理**：在 TOOLS 数组中添加 `hand` 类型工具，选中时 PatternCanvas 启用 panMode
+- **优点**：
+  - 功能可见，用户可直接看到"抓取"按钮
+  - 与现有工具切换逻辑完全一致
+  - 桌面端和移动端均可使用
+- **缺点**：需要手动切换工具
+- **风险**：极低风险
+
+#### 选项 C：同时支持按钮和空格键
+- **原理**：选项 A + B 的组合
+- **优点**：兼顾可见性和效率
+- **缺点**：实现复杂度增加，需处理空格键与其他输入框的冲突
+- **风险**：中等风险
+
+### 最终选择：选项 B
+
+### 选择理由
+1. **功能可见性**：工具栏中直观显示"✋ 抓取"按钮，用户容易发现
+2. **一致性**：与画笔、橡皮等工具切换方式完全一致，学习成本低
+3. **移动端友好**：不依赖键盘，触摸设备同样可用
+4. **实现简洁**：
+   - `ToolType` 类型添加 `'hand'`
+   - `TOOLS` 数组添加 hand 工具定义
+   - `PatternCanvas` 传入 `panMode={currentTool === 'hand'}`
+   - `handleCellClick` 和 `handleCellDrag` 中 hand 工具直接 return，不修改网格
+   - `applyTool` 的 default 分支已处理未知工具（不修改数据）
+5. **游标反馈**：选中抓取工具时游标变为 `grab`，用户立即知道可以拖拽
+6. **色卡选择兼容**：点击色卡仍会自动切换到画笔工具，用户可以快速从抓取模式回到绘制模式
+
+### 实现细节
+- `src/lib/types.ts`：`ToolType` 添加 `'hand'`
+- `src/components/PatternEditor.tsx`：
+  - `TOOLS` 数组添加 `{ type: 'hand', icon: '✋', label: '抓取', desc: '拖拽移动画布查看不同区域' }`
+  - `handleCellClick` 和 `handleCellDrag` 开头添加 `if (currentTool === 'hand') return;`
+  - `PatternCanvas` 传入 `panMode={currentTool === 'hand'}`
+- `src/components/PatternCanvas.tsx`：`panMode` prop 已在决策 30 中实现，此处复用

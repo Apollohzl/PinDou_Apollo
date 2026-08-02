@@ -1,5 +1,6 @@
 // ========== PatternCanvas.tsx ==========
 // Canvas 渲染图纸网格: 支持网格线、色号、缩放、鼠标编辑、高亮
+// 支持拖拽平移模式 (panMode): 点击拖拽滚动容器, 适用于制作引导页和编辑页抓取工具
 
 import React, { useEffect, useRef, useCallback } from 'react';
 import type { PatternGrid, Palette, BeadColor } from '../lib/types';
@@ -11,6 +12,8 @@ interface PatternCanvasProps {
   showColorCode: boolean;
   zoom: number;
   editable?: boolean;
+  /** 启用拖拽平移模式: 点击拖拽滚动容器, 而非编辑格子 */
+  panMode?: boolean;
   onCellClick?: (x: number, y: number) => void;
   onCellDrag?: (x: number, y: number) => void;
   onDragStart?: () => void;
@@ -34,6 +37,7 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
   showColorCode,
   zoom,
   editable = false,
+  panMode = false,
   onCellClick,
   onCellDrag,
   onDragStart,
@@ -44,8 +48,13 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
   completedColorIndices = null,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const lastCellRef = useRef<{ x: number; y: number } | null>(null);
+
+  // 拖拽平移相关 ref
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
 
   // 绘制 Canvas
   useEffect(() => {
@@ -196,8 +205,45 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
     [grid.width, grid.height]
   );
 
+  // ========== 拖拽平移逻辑 ==========
+  const handlePanStart = useCallback(
+    (clientX: number, clientY: number) => {
+      const container = containerRef.current;
+      if (!container) return;
+      isPanningRef.current = true;
+      panStartRef.current = {
+        x: clientX,
+        y: clientY,
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+      };
+    },
+    []
+  );
+
+  const handlePanMove = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!isPanningRef.current || !panStartRef.current || !containerRef.current) return;
+      const dx = clientX - panStartRef.current.x;
+      const dy = clientY - panStartRef.current.y;
+      containerRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
+      containerRef.current.scrollTop = panStartRef.current.scrollTop - dy;
+    },
+    []
+  );
+
+  const handlePanEnd = useCallback(() => {
+    isPanningRef.current = false;
+    panStartRef.current = null;
+  }, []);
+
+  // ========== 鼠标事件 ==========
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      if (panMode) {
+        handlePanStart(e.clientX, e.clientY);
+        return;
+      }
       if (!editable) return;
       const coord = getCellCoord(e);
       if (!coord) return;
@@ -206,11 +252,15 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
       onDragStart?.();
       onCellClick?.(coord.x, coord.y);
     },
-    [editable, getCellCoord, onCellClick, onDragStart]
+    [panMode, editable, getCellCoord, onCellClick, onDragStart, handlePanStart]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      if (panMode) {
+        handlePanMove(e.clientX, e.clientY);
+        return;
+      }
       if (!editable || !isDraggingRef.current) return;
       const coord = getCellCoord(e);
       if (!coord) return;
@@ -220,30 +270,46 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
       lastCellRef.current = coord;
       onCellDrag?.(coord.x, coord.y);
     },
-    [editable, getCellCoord, onCellDrag]
+    [panMode, editable, getCellCoord, onCellDrag, handlePanMove]
   );
 
   const handleMouseUp = useCallback(() => {
+    if (panMode) {
+      handlePanEnd();
+      return;
+    }
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
     lastCellRef.current = null;
     onDragEnd?.();
-  }, [onDragEnd]);
+  }, [panMode, onDragEnd, handlePanEnd]);
 
   // 全局 mouseup 防止拖出 canvas 后无法结束
   useEffect(() => {
-    if (!editable) return;
-    const handler = () => handleMouseUp();
+    const handler = () => {
+      if (panMode) {
+        handlePanEnd();
+      } else if (editable) {
+        handleMouseUp();
+      }
+    };
     window.addEventListener('mouseup', handler);
     window.addEventListener('touchend', handler);
     return () => {
       window.removeEventListener('mouseup', handler);
       window.removeEventListener('touchend', handler);
     };
-  }, [editable, handleMouseUp]);
+  }, [editable, panMode, handleMouseUp, handlePanEnd]);
 
+  // ========== 触摸事件 ==========
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      if (panMode) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        handlePanStart(touch.clientX, touch.clientY);
+        return;
+      }
       if (!editable) return;
       e.preventDefault();
       const touch = e.touches[0];
@@ -258,11 +324,17 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
       onDragStart?.();
       onCellClick?.(coord.x, coord.y);
     },
-    [editable, getCellCoord, onCellClick, onDragStart]
+    [panMode, editable, getCellCoord, onCellClick, onDragStart, handlePanStart]
   );
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
+      if (panMode) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        handlePanMove(touch.clientX, touch.clientY);
+        return;
+      }
       if (!editable || !isDraggingRef.current) return;
       e.preventDefault();
       const touch = e.touches[0];
@@ -278,11 +350,18 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
       lastCellRef.current = coord;
       onCellDrag?.(coord.x, coord.y);
     },
-    [editable, getCellCoord, onCellDrag]
+    [panMode, editable, getCellCoord, onCellDrag, handlePanMove]
   );
 
+  // 游标样式
+  const cursorStyle = panMode
+    ? 'grab'
+    : editable
+    ? 'crosshair'
+    : 'default';
+
   return (
-    <div className="canvas-container">
+    <div className="canvas-container" ref={containerRef}>
       <div className="canvas-wrapper">
         <canvas
           ref={canvasRef}
@@ -292,10 +371,10 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           style={{
-            cursor: editable ? 'crosshair' : 'default',
+            cursor: cursorStyle,
             imageRendering: 'pixelated',
             maxWidth: 'none',
-            touchAction: 'none',
+            touchAction: panMode ? 'none' : 'none',
             margin: '0 auto',
           }}
         />

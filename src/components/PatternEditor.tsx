@@ -29,6 +29,7 @@ const TOOLS: ToolDef[] = [
   { type: 'fill', icon: '🪣', label: '填充', desc: '填充连通区域' },
   { type: 'eyedropper', icon: '💧', label: '吸管', desc: '吸取格子颜色' },
   { type: 'replace', icon: '🔄', label: '换色', desc: '全局替换同色格子' },
+  { type: 'hand', icon: '✋', label: '抓取', desc: '拖拽移动画布查看不同区域' },
 ];
 
 const PatternEditor: React.FC<PatternEditorProps> = ({
@@ -136,6 +137,9 @@ const PatternEditor: React.FC<PatternEditorProps> = ({
   // 点击操作 (非拖拽场景: fill/replace/eyedropper)
   const handleCellClick = useCallback(
     (x: number, y: number) => {
+      // hand 工具不处理格子点击 (由 PatternCanvas 的 panMode 处理拖拽)
+      if (currentTool === 'hand') return;
+
       if (currentTool === 'eyedropper') {
         handleCellAction(x, y);
         return;
@@ -164,6 +168,9 @@ const PatternEditor: React.FC<PatternEditorProps> = ({
   // brush/eraser 拖拽时连续绘制
   const handleCellDrag = useCallback(
     (x: number, y: number) => {
+      // hand 工具不处理格子拖拽
+      if (currentTool === 'hand') return;
+
       if (currentTool === 'brush' || currentTool === 'eraser') {
         handleCellAction(x, y);
       }
@@ -316,6 +323,7 @@ const PatternEditor: React.FC<PatternEditorProps> = ({
         showColorCode={showColorCode}
         zoom={zoom}
         editable
+        panMode={currentTool === 'hand'}
         onCellClick={handleCellClick}
         onCellDrag={handleCellDrag}
         onDragStart={handleDragStart}

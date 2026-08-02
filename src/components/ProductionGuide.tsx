@@ -304,6 +304,9 @@ const ProductionGuide: React.FC<ProductionGuideProps> = ({ grid, palette }) => {
             </button>
           </div>
         </div>
+        <p className="text-xs" style={{ color: 'var(--color-text-light)' }}>
+          💡 拖拽预览图可移动查看 · 使用缩放按钮调整大小
+        </p>
       </div>
 
       <PatternCanvas
@@ -313,6 +316,7 @@ const ProductionGuide: React.FC<ProductionGuideProps> = ({ grid, palette }) => {
         showColorCode={true}
         zoom={zoom}
         editable={false}
+        panMode={true}
         highlightRow={highlightRow}
         highlightColorIndices={highlightColorIndices}
         completedRows={completedRows}
