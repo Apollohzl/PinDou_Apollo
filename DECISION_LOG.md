@@ -407,4 +407,45 @@
 
 ---
 
+## 决策 21：实际部署方案调整
+
+**问题**：GitHub Token 缺少 `workflow` scope，无法推送 `.github/workflows/` 目录下的文件，如何部署？
+
+**可选方案**：
+1. 等待用户提供具有 `workflow` scope 的 Token
+2. 使用 `gh-pages` 分支手动部署构建产物
+3. 使用 Vercel/Netlify 替代部署
+4. 本地构建后提交 dist 文件夹到 main 分支
+
+**最终选择**：方案 2 - 使用 `gh-pages` 分支手动部署
+
+**理由**：
+- 无需等待用户操作，可立即完成部署
+- `gh-pages` 分支部署是 GitHub Pages 的经典方案，稳定可靠
+- 构建产物与源码分离，仓库 main 分支保持整洁
+- `.github/workflows/deploy.yml` 文件仍保留在仓库中，未来用户获得 `workflow` scope 后可直接推送启用 Actions 自动部署
+- 部署后通过 GitHub API 验证 Pages 配置正确，站点已上线
+
+---
+
+## 决策 22：Favicon 路径处理
+
+**问题**：Vite 配置了 `base: '/PinDou_Apollo/'`，favicon 引用路径如何处理？
+
+**可选方案**：
+1. 在 HTML 中写完整路径 `/PinDou_Apollo/favicon.svg`
+2. 在 HTML 中写 `/favicon.svg`，让 Vite 自动添加 base 前缀
+3. 在 HTML 中写相对路径 `favicon.svg`
+4. 使用 Vite 的 import 方式引入
+
+**最终选择**：方案 2 - 写 `/favicon.svg`
+
+**理由**：
+- Vite 会在 dev 和 production 环境自动为 public 目录资源添加 base 前缀
+- 方案 1 会导致 dev server 路径重复（`/PinDou_Apollo/PinDou_Apollo/favicon.svg`）
+- 方案 2 在 dev 中变为 `/PinDou_Apollo/favicon.svg`，在 production 中也为 `/PinDou_Apollo/favicon.svg`，行为一致
+- 已通过 `curl` 验证 production 构建输出路径正确
+
+---
+
 > **文档维护**：本文档随项目开发持续更新，记录所有关键决策。
