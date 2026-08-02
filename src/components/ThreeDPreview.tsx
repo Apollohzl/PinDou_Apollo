@@ -18,11 +18,13 @@ const ThreeDPreview: React.FC<ThreeDPreviewProps> = ({ grid, palette }) => {
   const controlsRef = useRef<any>(null);
   const animationIdRef = useRef<number>(0);
   const beadGroupRef = useRef<any>(null);
+  const gridLinesRef = useRef<any>(null);
 
   const [config, setConfig] = useState<Preview3DConfig>({
     beadSize: 1,
     showHoles: true,
     autoRotate: true,
+    showGrid: true,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -236,6 +238,56 @@ const ThreeDPreview: React.FC<ThreeDPreviewProps> = ({ grid, palette }) => {
     controlsRef.current.autoRotateSpeed = 1.5;
   }, [config.autoRotate, loading]);
 
+  // 网格线显示/隐藏
+  useEffect(() => {
+    if (!sceneRef.current || loading) return;
+    let mounted = true;
+
+    const updateGrid = async () => {
+      const THREE = await import('three');
+      if (!mounted || !sceneRef.current) return;
+
+      // 移除旧网格线
+      if (gridLinesRef.current) {
+        sceneRef.current.remove(gridLinesRef.current);
+        gridLinesRef.current.geometry?.dispose?.();
+        gridLinesRef.current.material?.dispose?.();
+        gridLinesRef.current = null;
+      }
+
+      if (config.showGrid) {
+        // 构建网格线段 (每条线两个端点)
+        const points: number[] = [];
+        // 垂直线 (沿 Z 轴方向)
+        for (let x = 0; x <= grid.width; x++) {
+          points.push(x, 0, 0, x, 0, grid.height);
+        }
+        // 水平线 (沿 X 轴方向)
+        for (let y = 0; y <= grid.height; y++) {
+          points.push(0, 0, y, grid.width, 0, y);
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+        const material = new THREE.LineBasicMaterial({
+          color: 0x8b7355,
+          transparent: true,
+          opacity: 0.6,
+        });
+        const gridLines = new THREE.LineSegments(geometry, material);
+        gridLines.position.y = 0.01; // 略高于底板避免 z-fighting
+        sceneRef.current.add(gridLines);
+        gridLinesRef.current = gridLines;
+      }
+    };
+
+    updateGrid();
+
+    return () => {
+      mounted = false;
+    };
+  }, [config.showGrid, grid.width, grid.height, loading]);
+
   // 渲染循环
   useEffect(() => {
     if (!rendererRef.current || !sceneRef.current || !cameraRef.current || loading) return;
@@ -309,6 +361,14 @@ const ThreeDPreview: React.FC<ThreeDPreviewProps> = ({ grid, palette }) => {
               onChange={(e) => setConfig((c) => ({ ...c, showHoles: e.target.checked }))}
             />
             显示孔洞
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              checked={config.showGrid}
+              onChange={(e) => setConfig((c) => ({ ...c, showGrid: e.target.checked }))}
+            />
+            显示网格线
           </label>
         </div>
       </div>

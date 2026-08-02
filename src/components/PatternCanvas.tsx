@@ -296,6 +296,7 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
             imageRendering: 'pixelated',
             maxWidth: 'none',
             touchAction: 'none',
+            margin: '0 auto',
           }}
         />
       </div>

@@ -446,7 +446,7 @@ body {
 
 .canvas-wrapper {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: flex-start;
 }
 

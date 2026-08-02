@@ -575,3 +575,112 @@
 - 方案 4（按钮）增加 UI 复杂度，色块区域拥挤
 - `handleColorSelect` 和 `handleColorRightClick` 均使用 `useCallback` 包裹，避免不必要的重渲染
 - `onColorRightClick` 为可选 prop，PaletteSelector 在未传入时不绑定 contextmenu 事件，保持向后兼容
+
+---
+
+## 决策 28：Canvas 缩放后滚动条移动距离修复方案
+
+### 问题描述
+编辑图纸和制作引导两个页面中，当用户放大画布后，水平/垂直滚动条在滚动时移动距离有误，导致无法正确滚动观看到整个画布。放大倍数越大，问题越明显。
+
+### 原因分析
+`.canvas-wrapper` 使用了 `display: flex; justify-content: center;` 对 Canvas 进行居中。当 Canvas 放大后尺寸超过容器时，flexbox 的 `justify-content: center` 会将 Canvas 居中放置，导致 Canvas 在左侧产生负偏移（溢出到容器左边界之外）。然而滚动容器 (`overflow: auto`) 只能向右/下滚动，无法到达左侧溢出的部分，使得 Canvas 左侧和顶部区域无法查看。
+
+### 可选选项
+
+#### 选项 A：改用 `justify-content: safe center`
+- **原理**：CSS Box Alignment Level 3 引入 `safe` 关键字，当内容溢出时回退到 `flex-start` 对齐，避免数据丢失
+- **优点**：CSS 原生解决方案，代码改动最小（仅改一行 CSS）
+- **缺点**：`safe` 关键字在旧版浏览器中支持有限（Chrome 93+、Firefox 63+、Safari 11+），虽然 2026 年大部分用户浏览器已支持，但仍有兼容风险
+- **风险**：低风险，但兼容性边界不确定
+
+#### 选项 B：改用 flex `margin: auto` 替代 `justify-content: center`（已选择）
+- **原理**：将 `.canvas-wrapper` 的 `justify-content` 改为 `flex-start`，在 Canvas 元素上设置 `margin: 0 auto`。在 flexbox 中，`margin: auto` 会吸收剩余空间实现居中；当元素大于容器时，auto margin 解析为 0，元素从 flex-start 位置开始排列，滚动正常
+- **优点**：
+  - 所有浏览器完美支持，零兼容性问题
+  - 行为可预测：小画布居中，大画布从左上角开始可滚动
+  - 改动量小：CSS 改一行 + Canvas 内联样式加一个属性
+- **缺点**：需要同时修改 CSS 和组件内联样式
+- **风险**：极低风险
+
+#### 选项 C：改用 CSS Grid `place-content: safe center`
+- **原理**：类似选项 A，但使用 Grid 布局
+- **优点**：现代 CSS 方案
+- **缺点**：同样有 `safe` 关键字兼容性问题，且改为 Grid 布局改动更大
+- **风险**：中等风险
+
+### 最终选择：选项 B
+
+### 选择理由
+1. **零兼容性风险**：`margin: auto` 在 flexbox 中的行为是 CSS 规范明确定义的，所有浏览器（包括移动端）都完美支持
+2. **行为精确可控**：
+   - Canvas 小于容器时：`margin: 0 auto` 水平居中（保持原有视觉效果）
+   - Canvas 大于容器时：margin 解析为 0，Canvas 从左侧开始，滚动条可正常滚动到所有区域
+3. **改动最小**：仅需将 `.canvas-wrapper` 的 `justify-content: center` 改为 `flex-start`，并在 Canvas 的 inline style 中添加 `margin: '0 auto'`
+4. **GitHub Pages 环境**：作为静态站点部署，需确保最大兼容性，选项 B 是最稳妥的方案
+5. 垂直方向保持 `align-items: flex-start` 不变，Canvas 从顶部开始排列，垂直滚动始终正常
+
+### 实现细节
+- `src/index.css`：`.canvas-wrapper` 的 `justify-content` 从 `center` 改为 `flex-start`
+- `src/components/PatternCanvas.tsx`：Canvas 的 inline style 添加 `margin: '0 auto'`
+- 该修复对编辑图纸页和制作引导页同时生效，因为两者都使用 PatternCanvas 组件
+
+---
+
+## 决策 29：3D 预览网格线实现方案
+
+### 问题描述
+3D 阅览图的底板没有网格线，用户无法直观看到每颗豆子的位置对应关系。需要在 3D 预览中添加网格线展示功能。
+
+### 需求
+- 添加网格线显示勾选框，用户可自由切换
+- 网格线需与底板尺寸精确匹配（支持非正方形网格如 32×48）
+- 网格线需正确渲染在底板表面，不与豆子产生视觉冲突
+
+### 可选选项
+
+#### 选项 A：使用 THREE.GridHelper
+- **原理**：Three.js 内置的 `GridHelper(size, divisions)` 生成方形网格
+- **优点**：API 简单，一行代码生成网格
+- **缺点**：GridHelper 只支持正方形网格（size×size），对于非正方形图纸（如 32×48）会产生多余的线条或缺失线条
+- **风险**：非正方形网格显示不正确
+
+#### 选项 B：自定义 LineSegments 构建精确网格线（已选择）
+- **原理**：使用 `THREE.BufferGeometry` + `THREE.LineBasicMaterial` + `THREE.LineSegments` 手动构建网格线，精确匹配图纸的 width×height
+- **优点**：
+  - 精确匹配任意尺寸的图纸网格（正方形和非正方形均可）
+  - 完全控制线条颜色、透明度、位置
+  - 性能优秀（所有线段合并为一个 LineSegments 对象，单次 draw call）
+  - 可精确控制 y 坐标避免与底板的 z-fighting
+- **缺点**：需要手动构建顶点数据，代码量略多
+- **风险**：极低风险
+
+#### 选项 C：在底板纹理上绘制网格线
+- **原理**：创建 Canvas 纹理，在上面绘制网格线，然后作为底板的贴图
+- **优点**：网格线与底板完美融合
+- **缺点**：纹理分辨率限制可能导致线条模糊；切换网格线需重新生成纹理；实现复杂
+- **风险**：中等风险（纹理分辨率和缩放问题）
+
+### 最终选择：选项 B
+
+### 选择理由
+1. **精确性**：自定义 LineSegments 可以精确匹配任意 width×height 的图纸，每条线恰好对应一个网格行列，不会多也不会少
+2. **性能优秀**：所有网格线合并到一个 `LineSegments` 对象中，仅占用一次 draw call，对 3D 渲染性能无影响
+3. **视觉效果可控**：
+   - 使用 `0x8b7355`（暗金色）线条颜色，与底板的奶油色 (`0xf5e6c8`) 形成适度对比
+   - 设置 `transparent: true, opacity: 0.6` 使网格线不抢夺视觉焦点
+   - `position.y = 0.01` 略高于底板表面，避免 z-fighting 闪烁
+4. **生命周期管理完善**：
+   - 通过 `gridLinesRef` 引用管理网格线对象
+   - useEffect 依赖 `config.showGrid`、`grid.width`、`grid.height`，切换时自动移除旧网格并创建新网格
+   - 移除时正确 dispose geometry 和 material，避免内存泄漏
+5. **默认开启**：`showGrid: true` 默认勾选，用户首次进入 3D 预览即可看到网格线，了解豆子位置对应关系
+6. **与现有 UI 风格一致**：勾选框与"自动旋转"、"显示孔洞"使用相同的 label + checkbox 样式
+
+### 实现细节
+- `src/lib/types.ts`：`Preview3DConfig` 接口添加 `showGrid: boolean` 字段
+- `src/components/ThreeDPreview.tsx`：
+  - 添加 `gridLinesRef` 用于引用网格线对象
+  - 默认配置添加 `showGrid: true`
+  - 添加 useEffect 管理网格线的创建/移除，依赖 `config.showGrid`、`grid.width`、`grid.height`
+  - UI 添加"显示网格线"勾选框

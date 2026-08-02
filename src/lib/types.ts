@@ -130,4 +130,5 @@ export interface Preview3DConfig {
   beadSize: number;
   showHoles: boolean;
   autoRotate: boolean;
+  showGrid: boolean;
 }
