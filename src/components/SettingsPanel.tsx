@@ -23,11 +23,11 @@ const MIN_SIZE = 4;
 const MAX_SIZE = 200;
 
 const BRAND_OPTIONS: { value: BeadBrand; label: string }[] = [
-  { value: 'artkal-s', label: 'Artkal S (2.6mm)' },
-  { value: 'artkal-m', label: 'Artkal M (5mm)' },
+  { value: 'mard', label: 'MARD 221色 (5mm)' },
+  { value: 'artkal-s', label: 'Artkal S (5mm)' },
+  { value: 'artkal-m', label: 'Artkal M (2.6mm)' },
   { value: 'perler', label: 'Perler (5mm)' },
   { value: 'hama', label: 'Hama (5mm)' },
-  { value: 'mard', label: 'Mard (5mm)' },
 ];
 
 const DITHER_OPTIONS: { value: DitherAlgorithm; label: string; desc: string }[] = [

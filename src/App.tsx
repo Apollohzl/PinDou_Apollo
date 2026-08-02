@@ -30,11 +30,11 @@ import ProductionGuide from './components/ProductionGuide';
 const LazyThreeDPreview = lazy(() => import('./components/ThreeDPreview'));
 
 // ---------- 默认配置 ----------
-const initialPalette = getPalette('artkal-s');
+const initialPalette = getPalette('mard');
 
 const DEFAULT_CONFIG: PatternConfig = {
   beadSize: initialPalette.size,
-  brand: 'artkal-s',
+  brand: 'mard',
   width: 32,
   height: 32,
   dither: 'floyd-steinberg',

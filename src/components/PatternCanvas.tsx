@@ -1,6 +1,7 @@
 // ========== PatternCanvas.tsx ==========
 // Canvas 渲染图纸网格: 支持网格线、色号、缩放、鼠标编辑、高亮
 // 支持拖拽平移模式 (panMode): 点击拖拽滚动容器, 适用于制作引导页和编辑页抓取工具
+// 支持序号标注 (showAxisNumbers): 四边外显示灰色序号格, 序号从1开始递增
 
 import React, { useEffect, useRef, useCallback } from 'react';
 import type { PatternGrid, Palette, BeadColor } from '../lib/types';
@@ -14,6 +15,8 @@ interface PatternCanvasProps {
   editable?: boolean;
   /** 启用拖拽平移模式: 点击拖拽滚动容器, 而非编辑格子 */
   panMode?: boolean;
+  /** 四边显示灰色序号格 (1开始递增), 用于制作引导页 */
+  showAxisNumbers?: boolean;
   onCellClick?: (x: number, y: number) => void;
   onCellDrag?: (x: number, y: number) => void;
   onDragStart?: () => void;
@@ -38,6 +41,7 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
   zoom,
   editable = false,
   panMode = false,
+  showAxisNumbers = false,
   onCellClick,
   onCellDrag,
   onDragStart,
@@ -64,25 +68,82 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
     if (!ctx) return;
 
     const cellSize = Math.max(4, Math.floor(16 * zoom));
-    const canvasW = grid.width * cellSize;
-    const canvasH = grid.height * cellSize;
+    const axisSize = showAxisNumbers ? cellSize : 0;
+    const patternW = grid.width * cellSize;
+    const patternH = grid.height * cellSize;
+    const canvasW = patternW + 2 * axisSize;
+    const canvasH = patternH + 2 * axisSize;
 
     canvas.width = canvasW;
     canvas.height = canvasH;
 
+    // 序号格背景 (灰色)
+    if (showAxisNumbers) {
+      ctx.fillStyle = '#D9D9D9';
+      // 上下边
+      ctx.fillRect(0, 0, canvasW, axisSize);
+      ctx.fillRect(0, canvasH - axisSize, canvasW, axisSize);
+      // 左右边 (不含角落已填充)
+      ctx.fillRect(0, axisSize, axisSize, patternH);
+      ctx.fillRect(canvasW - axisSize, axisSize, axisSize, patternH);
+
+      // 绘制序号文字
+      const axisFontSize = Math.max(8, Math.floor(cellSize * 0.4));
+      ctx.font = `bold ${axisFontSize}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#333333';
+
+      // 上边和下边: 列号 1..width
+      for (let x = 0; x < grid.width; x++) {
+        const cx = axisSize + x * cellSize + cellSize / 2;
+        const numStr = String(x + 1);
+        // 上边
+        ctx.fillText(numStr, cx, axisSize / 2);
+        // 下边
+        ctx.fillText(numStr, cx, canvasH - axisSize / 2);
+      }
+      // 左边和右边: 行号 1..height
+      for (let y = 0; y < grid.height; y++) {
+        const cy = axisSize + y * cellSize + cellSize / 2;
+        const numStr = String(y + 1);
+        // 左边
+        ctx.fillText(numStr, axisSize / 2, cy);
+        // 右边
+        ctx.fillText(numStr, canvasW - axisSize / 2, cy);
+      }
+
+      // 序号格边框线
+      ctx.strokeStyle = '#999999';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      // 序号区与图案区交界线
+      ctx.moveTo(axisSize + 0.5, 0);
+      ctx.lineTo(axisSize + 0.5, canvasH);
+      ctx.moveTo(canvasW - axisSize + 0.5, 0);
+      ctx.lineTo(canvasW - axisSize + 0.5, canvasH);
+      ctx.moveTo(0, axisSize + 0.5);
+      ctx.lineTo(canvasW, axisSize + 0.5);
+      ctx.moveTo(0, canvasH - axisSize + 0.5);
+      ctx.lineTo(canvasW, canvasH - axisSize + 0.5);
+      ctx.stroke();
+    }
+
+    const colors = palette.colors;
+    const ox = axisSize; // 图案绘制 x 偏移
+    const oy = axisSize; // 图案绘制 y 偏移
+
     // 背景 (棋盘格表示透明)
     ctx.fillStyle = '#FFFBF0';
-    ctx.fillRect(0, 0, canvasW, canvasH);
+    ctx.fillRect(ox, oy, patternW, patternH);
     ctx.fillStyle = '#F0E6D2';
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
         if ((x + y) % 2 === 0) {
-          ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+          ctx.fillRect(ox + x * cellSize, oy + y * cellSize, cellSize, cellSize);
         }
       }
     }
-
-    const colors = palette.colors;
 
     // 绘制色块
     for (let y = 0; y < grid.height; y++) {
@@ -94,8 +155,8 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
         if (idx < 0 || idx >= colors.length) continue;
 
         const bead = colors[idx];
-        const px = x * cellSize;
-        const py = y * cellSize;
+        const px = ox + x * cellSize;
+        const py = oy + y * cellSize;
 
         // 完成的行/颜色降低不透明度
         let alpha = 1;
@@ -118,10 +179,10 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
       // 高亮当前行
       if (isHighlightRow) {
         ctx.fillStyle = 'rgba(255,107,157,0.25)';
-        ctx.fillRect(0, y * cellSize, canvasW, cellSize);
+        ctx.fillRect(ox, oy + y * cellSize, patternW, cellSize);
         ctx.strokeStyle = '#FF6B9D';
         ctx.lineWidth = 2;
-        ctx.strokeRect(1, y * cellSize + 1, canvasW - 2, cellSize - 2);
+        ctx.strokeRect(ox + 1, oy + y * cellSize + 1, patternW - 2, cellSize - 2);
       }
     }
 
@@ -131,14 +192,14 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let x = 0; x <= grid.width; x++) {
-        const px = x * cellSize + 0.5;
-        ctx.moveTo(px, 0);
-        ctx.lineTo(px, canvasH);
+        const px = ox + x * cellSize + 0.5;
+        ctx.moveTo(px, oy);
+        ctx.lineTo(px, oy + patternH);
       }
       for (let y = 0; y <= grid.height; y++) {
-        const py = y * cellSize + 0.5;
-        ctx.moveTo(0, py);
-        ctx.lineTo(canvasW, py);
+        const py = oy + y * cellSize + 0.5;
+        ctx.moveTo(ox, py);
+        ctx.lineTo(ox + patternW, py);
       }
       ctx.stroke();
 
@@ -147,14 +208,14 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
       ctx.lineWidth = 2;
       ctx.beginPath();
       for (let x = 0; x <= grid.width; x += 10) {
-        const px = x * cellSize + 0.5;
-        ctx.moveTo(px, 0);
-        ctx.lineTo(px, canvasH);
+        const px = ox + x * cellSize + 0.5;
+        ctx.moveTo(px, oy);
+        ctx.lineTo(px, oy + patternH);
       }
       for (let y = 0; y <= grid.height; y += 10) {
-        const py = y * cellSize + 0.5;
-        ctx.moveTo(0, py);
-        ctx.lineTo(canvasW, py);
+        const py = oy + y * cellSize + 0.5;
+        ctx.moveTo(ox, py);
+        ctx.lineTo(ox + patternW, py);
       }
       ctx.stroke();
     }
@@ -172,8 +233,8 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
           ctx.fillStyle = pickTextColor(colors[idx]);
           ctx.fillText(
             colors[idx].code,
-            x * cellSize + cellSize / 2,
-            y * cellSize + cellSize / 2
+            ox + x * cellSize + cellSize / 2,
+            oy + y * cellSize + cellSize / 2
           );
         }
       }
@@ -184,6 +245,7 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
     showGrid,
     showColorCode,
     zoom,
+    showAxisNumbers,
     highlightRow,
     highlightColorIndices,
     completedRows,
@@ -197,12 +259,31 @@ const PatternCanvas: React.FC<PatternCanvasProps> = ({
       if (!canvas) return null;
       const rect = canvas.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return null;
+
+      // 当显示序号格时, canvas 实际尺寸比图案区大, 需要计算偏移比例
+      if (showAxisNumbers) {
+        const cellSize = Math.max(4, Math.floor(16 * zoom));
+        const axisSize = cellSize;
+        const patternW = grid.width * cellSize;
+        const patternH = grid.height * cellSize;
+        const canvasW = patternW + 2 * axisSize;
+        const canvasH = patternH + 2 * axisSize;
+        // 鼠标在 canvas 中的像素位置
+        const mousePxX = ((e.clientX - rect.left) / rect.width) * canvasW;
+        const mousePxY = ((e.clientY - rect.top) / rect.height) * canvasH;
+        // 减去序号区偏移, 转换为网格坐标
+        const x = Math.floor((mousePxX - axisSize) / cellSize);
+        const y = Math.floor((mousePxY - axisSize) / cellSize);
+        if (x < 0 || x >= grid.width || y < 0 || y >= grid.height) return null;
+        return { x, y };
+      }
+
       const x = Math.floor(((e.clientX - rect.left) / rect.width) * grid.width);
       const y = Math.floor(((e.clientY - rect.top) / rect.height) * grid.height);
       if (x < 0 || x >= grid.width || y < 0 || y >= grid.height) return null;
       return { x, y };
     },
-    [grid.width, grid.height]
+    [grid.width, grid.height, zoom, showAxisNumbers]
   );
 
   // ========== 拖拽平移逻辑 ==========

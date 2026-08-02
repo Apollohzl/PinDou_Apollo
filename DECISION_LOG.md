@@ -797,3 +797,169 @@
   - `handleCellClick` 和 `handleCellDrag` 开头添加 `if (currentTool === 'hand') return;`
   - `PatternCanvas` 传入 `panMode={currentTool === 'hand'}`
 - `src/components/PatternCanvas.tsx`：`panMode` prop 已在决策 30 中实现，此处复用
+
+---
+
+## 决策 32：MARD 221 色标准色卡数据实现方案
+
+### 问题描述
+项目原有 MARD 色卡仅 13 色（D-01 到 D-13），作为 Artkal M 的近似子集内嵌在 `index.ts` 中。用户要求使用完整的 MARD 221 色标准色卡，并将其设为默认品牌。
+
+### 需求
+- 从网上搜索 MARD 221 色的完整 RGB 数据和色号
+- 将 221 色数据写入项目色卡系统
+- 将默认品牌从 `artkal-s` 改为 `mard`
+
+### 可选选项
+
+#### 选项 A：使用 MARD 291 色（含扩展系列）
+- **原理**：MARD 完整色号库为 291 色（221 标准 + 70 扩展）
+- **优点**：色彩最全
+- **缺点**：扩展系列（P/Q/R/T/Y/ZG）在零售中较少见，用户难以购买对应颜色；数据量更大
+- **风险**：用户使用扩展色但买不到对应豆子
+
+#### 选项 B：使用 MARD 221 色标准系列（已选择）
+- **原理**：使用 MARD 标准 221 色（A-H + M 共 9 个色系），覆盖市面常见零售包装
+- **优点**：
+  - 221 色覆盖绝大多数使用场景
+  - 数据来源可靠（bitbead.app 和 pd.anqstar.com 两份独立数据源互验一致）
+  - 9 个色系分类清晰：A(黄橙26) B(绿32) C(蓝青29) D(蓝紫26) E(粉玫24) F(红25) G(棕肤21) H(灰白23) M(大地15)
+- **缺点**：少量稀有颜色可能缺失
+- **风险**：极低风险
+
+#### 选项 C：保持 13 色近似方案
+- **原理**：维持原有 13 色 MARD 近似方案
+- **缺点**：色彩严重不足，无法满足用户需求
+- **风险**：不满足需求
+
+### 最终选择：选项 B
+
+### 选择理由
+1. **数据准确性**：从 bitbead.app 和 pd.anqstar.com 两个独立来源获取 221 色 HEX 和 RGB 数据，交叉验证完全一致
+2. **独立文件**：创建 `src/lib/palettes/mard.ts` 独立文件（而非内嵌 index.ts），与其他品牌数据文件保持一致的结构
+3. **命名方案**：每个颜色按色系命名（如 "黄橙1" / "Yellow-Orange 1"），色号使用原始编号（A1, B1, C1...），无连字符
+4. **默认品牌切换**：App.tsx 中 `DEFAULT_CONFIG.brand` 从 `'artkal-s'` 改为 `'mard'`，`getPalette('mard')` 获取初始色卡
+5. **品牌选项顺序**：SettingsPanel 中 MARD 移至首位，标签更新为 "MARD 221色 (5mm)"
+6. **getAllPalettes 顺序**：MARD 移至首位，与默认品牌一致
+7. **向后兼容**：旧的 13 色 MARD 数据被替换，已保存的 JSON 项目中颜色索引可能不匹配，但这是更换色卡的预期行为
+8. **Lab 值自动计算**：221 色的 Lab 值由 `buildPalette()` 通过 `rgbToLab` 统一计算，无需手动维护
+
+### 实现细节
+- `src/lib/palettes/mard.ts`：新建文件，221 条 `RawBeadColor` 记录 + `mardPalette` 导出
+- `src/lib/palettes/index.ts`：删除内嵌 13 色 MARD 定义，改为 `import { mardPalette } from './mard'`
+- `src/App.tsx`：`initialPalette = getPalette('mard')`，`brand: 'mard'`
+- `src/components/SettingsPanel.tsx`：MARD 移至 BRAND_OPTIONS 首位，修正 Artkal S/M 尺寸标签
+
+---
+
+## 决策 33：制作引导页四边序号格实现方案
+
+### 问题描述
+制作引导页的预览图缺少坐标序号，用户在逐行/逐色制作时无法快速定位具体位置。需要在预览图四边外添加灰色序号格，序号从 1 开始向右和向下递增。
+
+### 需求
+- 预览图四边（上、下、左、右）外各添加一行/列灰色格
+- 上边和下边：列号 1, 2, 3, ..., N（从左到右递增）
+- 左边和右边：行号 1, 2, 3, ..., M（从上到下递增）
+- 序号从左上角开始为 1
+
+### 可选选项
+
+#### 选项 A：使用 HTML 元素包裹 Canvas
+- **原理**：在 Canvas 外用 div/span 渲染序号
+- **优点**：不修改 Canvas 绘制逻辑
+- **缺点**：滚动时序号与图案对齐困难，需要同步滚动位置；DOM 结构复杂
+- **风险**：中高风险（对齐问题）
+
+#### 选项 B：扩展 Canvas 尺寸，将序号绘制到 Canvas 上（已选择）
+- **原理**：在 PatternCanvas 中添加 `showAxisNumbers` prop，启用时扩展 Canvas 尺寸（上下左右各增加一格），在扩展区域绘制灰色背景和序号文字
+- **优点**：
+  - 序号与图案在同一个 Canvas 中，滚动时自动同步
+  - 复用现有 Canvas 绘制逻辑，只需添加偏移量
+  - 零额外 DOM 元素
+- **缺点**：Canvas 尺寸增大，鼠标坐标转换需要调整
+- **风险**：低风险
+
+#### 选项 C：使用 SVG 叠加层
+- **原理**：在 Canvas 上方叠加一个 SVG 层渲染序号
+- **缺点**：需要精确同步 SVG 和 Canvas 的尺寸和位置；增加复杂度
+- **风险**：中等风险
+
+### 最终选择：选项 B
+
+### 选择理由
+1. **同步性保证**：序号和图案在同一 Canvas 中渲染，滚动/缩放时始终对齐
+2. **实现简洁**：
+   - 新增 `showAxisNumbers` prop（默认 false）
+   - 当启用时，`axisSize = cellSize`，Canvas 尺寸增加 `2 * axisSize`
+   - 所有图案绘制添加 `ox = axisSize` / `oy = axisSize` 偏移
+   - 序号区背景 `#D9D9D9`，文字 `#333333`，粗体
+   - 序号区与图案区交界处绘制边框线
+3. **坐标转换适配**：`getCellCoord` 函数在 `showAxisNumbers` 启用时，先计算鼠标在 Canvas 中的像素位置，再减去 `axisSize` 偏移后转换为网格坐标
+4. **不影响编辑页**：`showAxisNumbers` 默认 false，编辑页不受影响
+5. **仅在制作引导页启用**：`ProductionGuide` 传入 `showAxisNumbers={true}`
+
+### 实现细节
+- `src/components/PatternCanvas.tsx`：
+  - 新增 `showAxisNumbers?: boolean` prop
+  - 绘制 useEffect 中：当 `showAxisNumbers` 为 true 时，先绘制灰色序号格背景和文字，再以 `ox/oy` 偏移绘制图案
+  - `getCellCoord` 中：当 `showAxisNumbers` 为 true 时，计算偏移后的坐标
+- `src/components/ProductionGuide.tsx`：`PatternCanvas` 传入 `showAxisNumbers={true}`
+
+---
+
+## 决策 34：导出图片物料清单+序号+Logo 实现方案
+
+### 问题描述
+导出的 PNG 图片仅有拼豆图案，缺少色号参考、物料清单和网站标识。用户导出后无法直接用于采购和制作参考。
+
+### 需求
+- 导出图片包含：拼豆图案 + 四边序号 + 物料清单 + 网站 logo
+- 物料清单格式：粗体"物料清单"标题 → 灰色"像素总用量：{}" → 颜色方块+色号+RGB+数量（自动换行）
+- 左下角显示网站 logo 图标和 URL 文字
+
+### 可选选项
+
+#### 选项 A：导出多个文件（图案 PNG + 清单 PDF）
+- **原理**：图案和清单分开导出
+- **缺点**：用户需要管理多个文件；不符合"一张图片包含所有信息"的需求
+- **风险**：不满足需求
+
+#### 选项 B：在单个 Canvas 上绘制完整图片（已选择）
+- **原理**：重写 `exportPNG` 函数，在单个 Canvas 上从上到下依次绘制：图案区（含序号）→ 物料清单区 → Logo 区
+- **优点**：
+  - 一张 PNG 包含所有信息，便于打印和分享
+  - 完全使用 Canvas API，零额外依赖
+  - 物料清单自动换行，适应不同颜色数量
+- **缺点**：图片尺寸增大（高度增加）
+- **风险**：低风险
+
+#### 选项 C：使用 html2canvas 截取页面
+- **原理**：在页面上渲染完整的导出预览，用 html2canvas 截图
+- **缺点**：引入额外依赖（html2canvas ~200KB）；截图质量不稳定；样式不一致
+- **风险**：中等风险
+
+### 最终选择：选项 B
+
+### 选择理由
+1. **零依赖**：完全使用 Canvas 2D API 绘制，不引入任何新依赖
+2. **布局清晰**：
+   - 图案区：与制作引导页一致的序号格布局，四边灰色序号
+   - 物料清单区：粗体标题 + 灰色总用量 + 颜色条目（方块+色号+RGB+数量），自动换行
+   - Logo 区：3×3 像素色块 logo + URL 文字
+3. **自动换行**：物料清单列数 = `floor((可用宽度) / 条目宽度)`，超出列数自动换行到下一行
+4. **尺寸自适应**：所有字体大小、方块大小基于 `cellSize` 按比例缩放，不同导出尺寸下保持视觉协调
+5. **复用 computeUsage**：从 `pdf.ts` 导入 `computeUsage` 函数，避免重复实现
+6. **Logo 复用**：使用与 Header 组件相同的 3×3 像素色块颜色和布局
+
+### 实现细节
+- `src/lib/export/png.ts`：完全重写 `exportPNG` 函数
+  - 导入 `computeUsage` from `'./pdf'`
+  - Canvas 总尺寸 = padding + 图案区 + padding + 物料清单区 + padding + Logo区 + padding
+  - 图案区：四边序号格（与 PatternCanvas showAxisNumbers 逻辑一致）+ 色块 + 网格线 + 色号
+  - 物料清单区：
+    - 标题 "物料清单"：粗体，深色 `#1a1a2e`
+    - 副标题 "像素总用量：{N}"：常规，灰色 `#888888`
+    - 颜色条目：方块（`bead.hex`）+ 色号（粗体）+ RGB（灰色）+ 数量（粗体深色），居中对齐
+  - Logo 区：`drawLogo()` 绘制 3×3 色块 + URL 文字 `https://apollohzl.github.io/PinDou_Apollo/`
+- ExportPanel 无需修改，`exportPNG(grid, palette, pngOptions)` 接口不变

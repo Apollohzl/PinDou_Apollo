@@ -317,6 +317,7 @@ const ProductionGuide: React.FC<ProductionGuideProps> = ({ grid, palette }) => {
         zoom={zoom}
         editable={false}
         panMode={true}
+        showAxisNumbers={true}
         highlightRow={highlightRow}
         highlightColorIndices={highlightColorIndices}
         completedRows={completedRows}
